@@ -10,7 +10,7 @@ pip install requests
 ```
 
 ## Configuration
-Before you can start you have to update the values in `aspsms.conf`:
+Before you can start you have to update the values in `aspsms.conf`:  
 Example:
 ```
 {
