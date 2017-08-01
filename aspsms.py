@@ -6,72 +6,106 @@
 # Author: https://github.com/roger-dodger/
 
 import sys
+import os
 import requests
 import json
 import argparse
 import textwrap
 
 
-# Config
-USERKEY = ''
-PASSWORD = ''
-ORIGINATOR = ''
-
-# Base settings
-BASE_URL = 'https://json.aspsms.com'
-CALLS = dict()
-CALLS['check_credits'] = '/CheckCredits'
-CALLS['send_text_sms'] = '/SendSimpleTextSMS'
-CONTENT_TYPE = 'application/json'
+class Error(Exception):
+    '''Base exception class for aspsms module.'''
 
 
-def make_request(method, body):
-    '''
-    Make HTTP request and return response
-    '''
-    r = requests.post(BASE_URL + CALLS[method],
-                      headers={'Content-Type': CONTENT_TYPE},
-                      data=json.dumps(body))
-
-    response = r.json()
-    if response['StatusCode'] == '1':
-        return response
-    else:
-        sys.exit(response['StatusInfo'])
+class ConnectionError(Error):
+    '''Error to use when the connection to ASPSMS fails.'''
 
 
-def check_credits():
-    '''
-    Check your credits
-    '''
-    data = dict()
-    data['UserName'] = USERKEY
-    data['Password'] = PASSWORD
+class SmsClient(object):
+    # Base settings
+    BASE_URL = 'https://json.aspsms.com'
+    CALLS = {
+        'CHECK_CREDITS': '/CheckCredits',
+        'SEND_TEXT_SMS': '/SendSimpleTextSMS',
+    }
+    CONTENT_TYPE = 'application/json'
 
-    response = make_request('check_credits', data)
+    def __init__(self, conf):
+        self._config = conf
 
-    print "Remaining credits: {}".format(response['Credits'])
+    def _make_request(self, method, body=None):
+        '''Make HTTP request and return response
 
+        Args:
+            method:
+            body:
 
-def send_text_sms(recipient, message, originator):
-    '''
-    Send single or multipart text messages in GSM 7-bit or Unicode
-    '''
-    data = dict()
-    data['UserName'] = USERKEY
-    data['Password'] = PASSWORD
-    data['Originator'] = originator
-    data['Recipients'] = recipient
-    data['MessageText'] = message
+        Returns:
 
-    make_request('send_text_sms', data)
-    print "Message has been sent!"
+        Raises:
+            ConnectionError: Connection to ASPSMS failed.
+        '''
+        # Append credentials
+        if not body:
+            body = dict()
+        body['UserName'] = self._config['USERKEY']
+        body['Password'] = self._config['PASSWORD']
+
+        try:
+            r = requests.post(self.BASE_URL + self.CALLS[method],
+                              headers={'Content-Type': self.CONTENT_TYPE},
+                              data=json.dumps(body))
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(e)
+
+        response = r.json()
+        if response['StatusCode'] == '1':
+            return response
+        raise ConnectionError(response['StatusInfo'])
+
+    def check_credits(self):
+        '''Check your credits.
+
+        Returns:
+
+        Raises:
+            ConnectionError: Connection to ASPSMS failed.
+        '''
+        return self._make_request('CHECK_CREDITS')['Credits']
+
+    def send_text_sms(self, recipient, message, originator):
+        '''Send single or multipart text messages in GSM 7-bit or Unicode.
+
+        Args:
+            receipient: Message receipient
+            message: Message text
+            originator: Message originator
+
+        Raises:
+            ConnectionError: Connection to ASPSMS failed.
+        '''
+        data = dict()
+        data['Originator'] = originator
+        data['Recipients'] = recipient
+        data['MessageText'] = message
+
+        self._make_request('SEND_TEXT_SMS', data)
 
 
 def main():
     '''
     Main function
     '''
+
+    # Read config file
+    CONF = 'aspsms.conf'
+    script_directory = os.path.dirname(os.path.realpath(__file__))
+    config_file = os.path.join(script_directory, CONF)
+    if not os.path.isfile(config_file):
+        sys.exit('Config file {} not found'.format(CONF))
+    with open(config_file) as config_handler:
+        conf = json.load(config_handler)
+
     parser = argparse.ArgumentParser(
         description='ASPSMS console client',
         formatter_class=argparse.RawTextHelpFormatter)
@@ -89,13 +123,15 @@ def main():
         help='message recipient(s)')
     parser.add_argument(
         '--originator', '-o',
-        default=ORIGINATOR,
+        default=conf['ORIGINATOR'],
         help='originator for message')
     parser.add_argument(
         '--message', '-m',
         help='message to be sent')
     parser.add_argument('--version', action='version', version='%(prog)s 0.1')
     args = parser.parse_args()
+
+    sc = SmsClient(conf)
 
     if args.command == 'send':
         # Override originator from configuration if given
@@ -114,13 +150,20 @@ def main():
 
         # No message was given - terminate
         if not message:
-            sys.exit("Message cannot be emtpy")
+            sys.exit('Message cannot be emtpy')
 
         # Send message
-        send_text_sms(args.recipient, message, originator)
+        try:
+            sc.send_text_sms(args.recipient, message, originator)
+            print 'Message has been sent!'
+        except ConnectionError as e:
+            print 'Unable to send message: {}'.format(e)
 
     elif args.command == 'credits':
-        check_credits()
+        try:
+            print 'Remaining credits: {}'.format(sc.check_credits())
+        except ConnectionError as e:
+            print 'Unable to check credits: {}'.format(e)
 
 
 if __name__ == "__main__":

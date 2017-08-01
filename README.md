@@ -10,15 +10,14 @@ pip install requests
 ```
 
 ## Configuration
-Before you can start you have to fill-in the configuration parameters in the
-header of the script:
+Before you can start you have to update the values in `aspsms.conf`:
+Example:
 ```
-...
-## Config
-USERKEY = ''       # ASPSMS user key (https://www.aspsms.com/de/userkey/)
-PASSWORD = ''      # ASPSMS password
-ORIGINATOR = ''    # Originator in E.164 or up to 11 alphabetic characters
-...
+{
+    "USERKEY": "ABCDEFGHIJKL",
+    "PASSWORD": "myPassword",
+    "ORIGINATOR": "+41791234567"
+}
 ```
 
 ## Usage
